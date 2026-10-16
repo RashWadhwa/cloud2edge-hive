@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.venv/
+__pycache__/
+ha_config/
+influx_data/
+grafana_data/
+mosquitto_data/

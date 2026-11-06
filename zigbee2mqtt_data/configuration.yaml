@@ -4,7 +4,8 @@ mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://mosquitto:1883
 serial:
-  port: /dev/ttyACM0
+  port: /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_XXXX-if00-port0
+  adapter: ember
 frontend:
   port: 8080
 advanced:

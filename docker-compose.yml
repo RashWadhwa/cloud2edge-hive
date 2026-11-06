@@ -22,8 +22,7 @@ services:
     environment:
       - TZ=Europe/London
     devices:
-      - /dev/ttyACM0:/dev/ttyACM0  # ConBee II
-    depends_on:
+      - /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_XXXX-if00-port0:/dev/ttyUSB0
       - mosquitto
 
   homeassistant:

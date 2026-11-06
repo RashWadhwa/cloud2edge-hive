@@ -1,3 +1,4 @@
+
 services:
   mosquitto:
     image: eclipse-mosquitto:2
@@ -15,9 +16,7 @@ services:
     image: ghcr.io/home-assistant/home-assistant:stable
     restart: unless-stopped
     volumes:
-      - /path/to/ha/config:/config
-    ports:
-      - "8123:8123"
+      - ./ha_config:/config
     network_mode: host
 
   zigbee2mqtt:
@@ -58,4 +57,3 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana_data:/var/lib/grafana
-

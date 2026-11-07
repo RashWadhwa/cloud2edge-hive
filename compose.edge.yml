@@ -1,6 +1,6 @@
 name: edgeclimate
 
-# Independent of the original Hive Compose stack and its existing volumes.
+# Arduino/BME280 monitoring stack. Persistence uses edgeclimate named volumes.
 services:
   influxdb:
     image: influxdb:2.7

@@ -8,9 +8,8 @@ without internet. Cloud weather is supplementary and explicitly becomes stale.
 ## Hardware, software and keys
 
 Use the equipment you already have: Arduino, connected BME280, existing USB
-cable, Pi, power supply/storage, and phone. No new sensor, SONOFF hub, smart
-plug, Alexa device or Hive pairing is required. Leave your working Hive heating
-system alone. A single BME280 measures one physical location; Open-Meteo is not
+cable, Pi, power supply/storage, and phone. Leave your existing heating system
+independent of this project. A single BME280 measures one physical location; Open-Meteo is not
 a second physical sensor at your house.
 
 Use 64-bit Raspberry Pi OS, Docker with Compose v2, Python 3 and OpenSSL.
@@ -48,11 +47,13 @@ flowchart LR
 Node-RED uses built-in HTTP nodes; no community-node downloads are needed at
 startup. The Python bridge uses the standard library, including Linux termios.
 Grafana has a provisioned dashboard and datasource, so it needs no external
-plugins. The stack is `compose.edge.yml`, project `edgeclimate`, with distinct
-named volumes and ports; the original Hive Compose file and data are preserved.
-Do not run the legacy analytics containers alongside this stack on a constrained
-Pi unless you need them. Inspect and stop unused containers individually; never
-delete their data to make room without a verified backup.
+plugins. The only supported stack is `compose.edge.yml`, project `edgeclimate`,
+using named volumes for persistence. The repository uses one branch, `main`.
+The former Zigbee/Hive Compose definition and seed configuration have been
+removed from current source; they remain recoverable through Git history.
+Existing runtime directories and containers are not removed by that source
+cleanup. Inspect and stop unused older containers individually; never delete
+their data to make room without a verified backup.
 
 ## Install on your Pi
 
@@ -67,7 +68,7 @@ nano .edge/config.env
 ```
 
 Set `ARDUINO_DEVICE` to the full Arduino `/dev/serial/by-id/...` path, without
-the `-> ../../tty...` part. Do not select the SONOFF coordinator. Set
+the `-> ../../tty...` part. Set
 `SERIAL_BAUD` to the existing sketch's baud rate, initially 9600 in the example.
 The script reads the device group automatically. Close Serial Monitor and any
 other program reading that serial port before starting.

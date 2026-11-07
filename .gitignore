@@ -220,6 +220,7 @@ __marimo__/
 .streamlit/secrets.toml
 .venv/
 __pycache__/
+# Preserve exclusions for data left by earlier installations.
 ha_config/
 influx_data/
 grafana_data/

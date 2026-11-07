@@ -1,0 +1,158 @@
+name: edgeclimate
+
+# Independent of the original Hive Compose stack and its existing volumes.
+services:
+  influxdb:
+    image: influxdb:2.7
+    restart: unless-stopped
+    environment:
+      INFLUXD_REPORTING_DISABLED: "true"
+    volumes:
+      - influx:/var/lib/influxdb2
+    networks: [backend]
+    logging: &logging
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  provision:
+    image: python:3.12-slim-bookworm
+    command: [python, /app/provision.py]
+    depends_on: [influxdb]
+    environment:
+      INFLUX_ORG: edgeclimate
+      INFLUX_BUCKET: environment
+    volumes:
+      - ./edge:/app:ro
+      - ./.edge/secrets:/secrets
+    networks: [backend]
+    logging: *logging
+
+  nodered:
+    image: nodered/node-red:4.1.1
+    restart: unless-stopped
+    user: "${EDGE_UID:-1000}:${EDGE_GID:-1000}"
+    depends_on:
+      provision: {condition: service_completed_successfully}
+      storage: {condition: service_completed_successfully}
+    env_file: .edge/config.env
+    environment:
+      TZ: UTC
+      NO_PROXY: influxdb,nodered,grafana,localhost,127.0.0.1
+      no_proxy: influxdb,nodered,grafana,localhost,127.0.0.1
+    ports: ["127.0.0.1:1880:1880"]
+    volumes:
+      - nodered:/data
+      - ./edge/nodered/settings.js:/data/settings.js:ro
+      - ./edge/nodered/flows.json:/data/flows.json:ro
+      - ./edge/nodered/logic.js:/opt/edge/logic.js:ro
+      - ./.edge/secrets/nodered_auth.json:/run/secrets/nodered_auth.json:ro
+      - ./.edge/secrets/nodered_credential_key:/run/secrets/nodered_credential_key:ro
+      - ./.edge/secrets/ingest_token:/run/secrets/ingest_token:ro
+      - ./.edge/secrets/influx_write_token:/run/secrets/influx_write_token:ro
+    networks: [backend, egress]
+    logging: *logging
+
+  serial:
+    image: python:3.12-slim-bookworm
+    profiles: [hardware]
+    restart: unless-stopped
+    user: "${EDGE_UID:-1000}:${EDGE_GID:-1000}"
+    group_add: ["${ARDUINO_GID:-20}"]
+    depends_on: [nodered]
+    env_file: .edge/config.env
+    devices: ["${ARDUINO_DEVICE:-/dev/ARDUINO_NOT_CONFIGURED}:/dev/arduino"]
+    command: [python, /app/bridge.py, serial]
+    volumes:
+      - ./edge/bridge.py:/app/bridge.py:ro
+      - ./.edge/secrets/ingest_token:/run/secrets/ingest_token:ro
+    networks: [backend]
+    logging: *logging
+
+  simulator:
+    image: python:3.12-slim-bookworm
+    profiles: [demo]
+    restart: unless-stopped
+    user: "${EDGE_UID:-1000}:${EDGE_GID:-1000}"
+    depends_on: [nodered]
+    command: [python, /app/bridge.py, simulate]
+    volumes:
+      - ./edge/bridge.py:/app/bridge.py:ro
+      - ./.edge/secrets/ingest_token:/run/secrets/ingest_token:ro
+    networks: [backend]
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    restart: unless-stopped
+    depends_on:
+      provision: {condition: service_completed_successfully}
+      storage: {condition: service_completed_successfully}
+    user: "${EDGE_UID:-1000}:${EDGE_GID:-1000}"
+    # UID is the ordinary host user on rootful Docker, container root in the
+    # managed rootless daemon (mapped to the unprivileged host user).
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - 'export INFLUX_READ_TOKEN="$$(cat /run/secrets/influx_read_token)"; exec /run.sh'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_SECRET_KEY__FILE: /run/secrets/grafana_secret_key
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_SERVER_PROTOCOL: https
+      GF_SERVER_CERT_FILE: /certs/server.crt
+      GF_SERVER_CERT_KEY: /certs/server.key
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LOG_MODE: console
+      NO_PROXY: influxdb,nodered,grafana,localhost,127.0.0.1
+      no_proxy: influxdb,nodered,grafana,localhost,127.0.0.1
+    ports: ["${EDGE_BIND:-127.0.0.1}:3443:3000"]
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./edge/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./edge/grafana/dashboards:/dashboards:ro
+      - ./.edge/secrets/influx_read_token:/run/secrets/influx_read_token:ro
+      - ./.edge/secrets/grafana_admin_password:/run/secrets/grafana_admin_password:ro
+      - ./.edge/secrets/grafana_secret_key:/run/secrets/grafana_secret_key:ro
+      - ./.edge/tls/server.crt:/certs/server.crt:ro
+      - ./.edge/tls/server.key:/certs/server.key:ro
+    networks: [backend]
+    logging: *logging
+
+  storage:
+    image: python:3.12-slim-bookworm
+    environment:
+      EDGE_UID: ${EDGE_UID:-1000}
+      EDGE_GID: ${EDGE_GID:-1000}
+    command: [python, -c, "import os; [os.chown(p, int(os.environ['EDGE_UID']), int(os.environ['EDGE_GID'])) for p in ['/volumes/grafana', '/volumes/nodered']]"]
+    volumes:
+      - grafana:/volumes/grafana
+      - nodered:/volumes/nodered
+    networks: [backend]
+
+  tools:
+    image: python:3.12-slim-bookworm
+    profiles: [tools]
+    command: [python, /app/check.py]
+    volumes:
+      - ./edge:/app:ro
+      - ./.edge:/private
+      - influx:/volumes/influx:ro
+      - grafana:/volumes/grafana:ro
+      - nodered:/volumes/nodered:ro
+    networks: [backend]
+    logging: *logging
+
+networks:
+  backend: {internal: true}
+  egress: {}
+volumes:
+  influx: {}
+  grafana: {}
+  nodered: {}

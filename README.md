@@ -1,5 +1,27 @@
 # cloud2edge-hive
 
+**Current project: EdgeClimate — Secure Offline Environmental Monitoring with
+Cloud Weather Context.** Uses your existing Arduino/BME280 over USB, Node-RED,
+InfluxDB, Grafana, local multi-user roles and optional Open-Meteo weather.
+See [the project and setup guide](docs/PROJECT.md) for installation, credentials,
+security scope and the router-off experiment. No external API key is needed
+for the public non-commercial weather endpoint.
+
+```sh
+./scripts/edge init
+# Edit .edge/config.env for your actual Arduino and approximate weather location.
+# Software-only validation (clearly labelled simulated data):
+./scripts/edge demo
+./scripts/edge verify
+# With your Arduino configured and emitting JSON lines:
+# ./scripts/edge up
+```
+
+This is a separate Compose project (`compose.edge.yml`) and preserves the
+existing Hive setup below. Keep the SLT3b paired with its Hive hub.
+
+## Original Hive workflow
+
 Collect room temperature on a Raspberry Pi. A Hive device reports over Zigbee to a USB coordinator. Zigbee2MQTT publishes the readings to Mosquitto, and Home Assistant displays the current reading and records its history.
 
 ## Start on the Pi

@@ -1,0 +1,216 @@
+[
+  {
+    "id": "edge-flow",
+    "type": "tab",
+    "label": "EdgeClimate: local measurements + weather",
+    "disabled": false,
+    "info": "Do not expose the editor publicly. Real, simulated and weather-model sources have separate tags."
+  },
+  {
+    "id": "serial-http",
+    "type": "http in",
+    "z": "edge-flow",
+    "name": "Authenticated Arduino ingest",
+    "url": "/ingest",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 160,
+    "y": 100,
+    "wires": [
+      [
+        "validate"
+      ]
+    ]
+  },
+  {
+    "id": "validate",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Authenticate + validate units + dew point",
+    "outputs": 2,
+    "x": 450,
+    "y": 100,
+    "wires": [
+      [
+        "influx-prepare"
+      ],
+      [
+        "serial-response"
+      ]
+    ],
+    "func": "const equal = global.get('equalToken');\nif (!equal(msg.req.headers.authorization, 'Bearer ' + global.get('ingestToken'))) {\n    msg.statusCode=401; msg.payload='Unauthorized'; msg.headers={}; return [null,msg];\n}\ntry { msg.payload=global.get('edge').indoor(msg.payload); return [msg,null]; }\ncatch(e) { node.warn(e.message); msg.statusCode=400; msg.payload='Invalid reading'; msg.headers={}; return [null,msg]; }"
+  },
+  {
+    "id": "influx-prepare",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Scoped write-only credential",
+    "outputs": 1,
+    "x": 640,
+    "y": 200,
+    "wires": [
+      [
+        "influx-http"
+      ]
+    ],
+    "func": "msg.headers={'Authorization':'Token '+global.get('influxWriteToken'),'Content-Type':'text/plain'}; msg.url='http://influxdb:8086/api/v2/write?org=edgeclimate&bucket=environment&precision=ms'; return msg;"
+  },
+  {
+    "id": "influx-http",
+    "type": "http request",
+    "z": "edge-flow",
+    "name": "Write to local InfluxDB",
+    "method": "POST",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "senderr": false,
+    "x": 910,
+    "y": 200,
+    "wires": [
+      [
+        "write-result"
+      ]
+    ]
+  },
+  {
+    "id": "write-result",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Report storage result without credentials",
+    "outputs": 2,
+    "x": 1160,
+    "y": 200,
+    "wires": [
+      [
+        "serial-response"
+      ],
+      []
+    ],
+    "func": "const ok=msg.statusCode===204; if(!ok) node.warn('storage_write_failed status='+msg.statusCode); msg.headers={}; msg.payload=ok?'':'Storage unavailable'; msg.statusCode=ok?204:503; if(msg.res) return [msg,null]; return [null,msg];"
+  },
+  {
+    "id": "serial-response",
+    "type": "http response",
+    "z": "edge-flow",
+    "name": "Accepted only after storage confirms",
+    "statusCode": "",
+    "headers": {},
+    "x": 1140,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "weather-timer",
+    "type": "inject",
+    "z": "edge-flow",
+    "name": "Weather: every 15 minutes",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "900",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "15",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 320,
+    "wires": [
+      [
+        "weather-url"
+      ]
+    ]
+  },
+  {
+    "id": "weather-url",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Location configured? Fixed API endpoint",
+    "outputs": 1,
+    "x": 480,
+    "y": 320,
+    "wires": [
+      [
+        "weather-http"
+      ]
+    ],
+    "func": "try {const cfg={}; for(const k of ['WEATHER_ENABLED','WEATHER_LATITUDE','WEATHER_LONGITUDE']) cfg[k]=env.get(k); const url=global.get('edge').weatherUrl(cfg); if(!url) return null; msg.url=url; msg.headers={}; return msg;} catch(e){node.warn(e.message); return null;}"
+  },
+  {
+    "id": "weather-http",
+    "type": "http request",
+    "z": "edge-flow",
+    "name": "Open-Meteo (timeout, TLS verified)",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "senderr": false,
+    "requestTimeout": "15000",
+    "x": 780,
+    "y": 320,
+    "wires": [
+      [
+        "weather-validate"
+      ]
+    ]
+  },
+  {
+    "id": "weather-validate",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Preserve weather valid time; reject bad responses",
+    "outputs": 1,
+    "x": 1070,
+    "y": 320,
+    "wires": [
+      [
+        "influx-prepare"
+      ]
+    ],
+    "func": "if(msg.statusCode!==200){node.warn('weather_fetch_failed status='+msg.statusCode);return null;} try{msg.payload=global.get('edge').weather(msg.payload,env.get('WEATHER_LOCATION')||'outdoor-estimate'); return msg;}catch(e){node.warn(e.message);return null;}"
+  },
+  {
+    "id": "errors",
+    "type": "catch",
+    "z": "edge-flow",
+    "name": "Isolate network errors from serial collection",
+    "scope": null,
+    "uncaught": false,
+    "x": 330,
+    "y": 440,
+    "wires": [
+      [
+        "errors-handle"
+      ]
+    ]
+  },
+  {
+    "id": "errors-handle",
+    "type": "function",
+    "z": "edge-flow",
+    "name": "Redacted operational event",
+    "outputs": 1,
+    "x": 700,
+    "y": 440,
+    "wires": [
+      [
+        "serial-response"
+      ]
+    ],
+    "func": "node.warn('pipeline_error node='+(msg.error?.source?.id||'unknown')); if(!msg.res) return null; msg.headers={};msg.statusCode=503;msg.payload='Service unavailable';return msg;"
+  }
+]

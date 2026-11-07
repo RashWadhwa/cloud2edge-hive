@@ -225,3 +225,6 @@ influx_data/
 grafana_data/
 mosquitto_data/
 /zigbee2mqtt/data/
+
+# EdgeClimate secrets, certificates, local settings, evidence and backups
+/.edge/

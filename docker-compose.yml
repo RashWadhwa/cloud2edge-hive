@@ -5,10 +5,9 @@ services:
     container_name: mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "127.0.0.1:1883:1883"
     volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto_data:/mosquitto/data
 
   homeassistant:
@@ -21,20 +20,24 @@ services:
 
   zigbee2mqtt:
     container_name: zigbee2mqtt
-    image: koenkk/zigbee2mqtt:latest
+    image: ghcr.io/koenkk/zigbee2mqtt:latest
     restart: unless-stopped
+    depends_on:
+      - mosquitto
     volumes:
       - ./zigbee2mqtt/data:/app/data
       - /run/udev:/run/udev:ro
     ports:
       - "8080:8080"
     devices:
-      - /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_485c3961e1a2ef11b0be8e6661ce3355-if00-port0:/dev/ttyUSB0
+      - "${ZIGBEE_DEVICE:?Set ZIGBEE_DEVICE in .env to the Pi USB serial path}:/dev/ttyUSB0"
     environment:
       - TZ=Europe/London
+      - ZIGBEE2MQTT_CONFIG_SERIAL_PORT=/dev/ttyUSB0
 
   influxdb:
     image: influxdb:2.7
+    profiles: [analytics]
     container_name: influx
     restart: unless-stopped
     ports:
@@ -44,13 +47,14 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=hive
-      - DOCKER_INFLUXDB_INIT_PASSWORD=HiveEdge1234
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-}
       - DOCKER_INFLUXDB_INIT_ORG=hive-edge
       - DOCKER_INFLUXDB_INIT_BUCKET=hive
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=hive-edge-token-123
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN:-}
 
   grafana:
     image: grafana/grafana:latest
+    profiles: [analytics]
     container_name: grafana
     restart: unless-stopped
     ports:

@@ -224,3 +224,4 @@ ha_config/
 influx_data/
 grafana_data/
 mosquitto_data/
+/zigbee2mqtt/data/

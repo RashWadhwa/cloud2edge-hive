@@ -1,13 +1,17 @@
-homeassistant: true
-permit_join: true
+version: 5
+homeassistant:
+  enabled: true
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://mosquitto:1883
 serial:
-  port: /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_485c3961e1a2ef11b0be8e6661ce3355-if00-port0
+  port: /dev/ttyUSB0
   adapter: ember
 frontend:
+  enabled: true
   port: 8080
 advanced:
   channel: 11
-  
+  network_key: GENERATE
+  pan_id: GENERATE
+  ext_pan_id: GENERATE
